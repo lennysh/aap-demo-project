@@ -29,3 +29,4 @@
       when: lint_result.rc != 0
       ansible.builtin.fail:
         msg: Ansible-lint failed with exit code {{ lint_result.rc }}. Please review the output above.
+...
