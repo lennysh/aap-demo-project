@@ -1,2 +1,2 @@
-Example AAP Project
-===================
+Demo AAP Project
+================
