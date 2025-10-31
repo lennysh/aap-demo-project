@@ -1,0 +1,31 @@
+---
+- name: Lint AAP Project with ansible-lint
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Run ansible-lint on the project directory
+      register: lint_result
+      changed_when: false
+      ignore_errors: true
+      args:
+        chdir: /runner/project
+      ansible.builtin.shell: |
+        set -e
+        unset ANSIBLE_COLLECTIONS_PATHS
+        ansible-lint --parseable --nocolor .
+
+    - name: Display linting results
+      when: lint_result.stdout is defined and lint_result.stdout | length > 0
+      ansible.builtin.debug:
+        var: lint_result.stdout_lines
+
+    - name: Display linting warnings and errors (if any)
+      when: lint_result.stderr is defined and lint_result.stderr | length > 0
+      ansible.builtin.debug:
+        var: lint_result.stderr_lines
+
+    - name: Fail the playbook if linting errors were found (warnings are OK)
+      when: lint_result.rc != 0
+      ansible.builtin.fail:
+        msg: Ansible-lint failed with exit code {{ lint_result.rc }}. Please review the output above.

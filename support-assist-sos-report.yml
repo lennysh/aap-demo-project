@@ -1,0 +1,4 @@
+---
+- name: Run the infra.support_assist.sos_report playbook
+  ansible.builtin.import_playbook: infra.support_assist.sos_report
+...

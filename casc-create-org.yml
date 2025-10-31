@@ -1,0 +1,91 @@
+---
+- name: Create Organization(s) in Gateway
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_hostname: "{{ lookup('env', 'CONTROLLER_HOST') }}"
+    aap_username: "{{ lookup('env', 'CONTROLLER_USERNAME') | default(omit) }}"
+    aap_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') | default(omit) }}"
+    aap_token: "{{ lookup('env', 'CONTROLLER_OAUTH_TOKEN') | default(omit) }}"
+    aap_validate_certs: "{{ lookup('env', 'CONTROLLER_VERIFY_SSL') }}"
+    aap_configuration_secure_logging: true
+    query_aap_api_max_objects: 10000
+
+  pre_tasks:
+    - name: Authentication | Setup
+      ansible.builtin.include_tasks: "tasks/{{ casc_aap_version }}/auth_setup.yml"
+      when:
+        - aap_token is not defined or aap_token | trim | length = 0
+        - aap_username is defined
+        - aap_password is defined
+      tags:
+        - always
+
+  tasks:
+    - name: "Get current Organizations from the Gateway API"
+      ansible.builtin.set_fact:
+        gateway_organizations_lookvar: "{{ query('ansible.platform.gateway_api', 'api/gateway/v1/organizations/',
+                                            query_params=(query_params | combine({'id': organization_id})) if organization_id is defined else query_params,
+                                            host=aap_hostname, oauth_token=aap_token, verify_ssl=aap_validate_certs,
+                                            return_all=true, max_objects=query_aap_api_max_objects | default(10000))
+                                        }}"
+      vars:
+        query_params:
+          order_by: 'id'
+      no_log: "{{ aap_configuration_secure_logging | default(true) }}"
+      tags:
+        - always
+
+    - name: "Check if organization already exists and fail if it does"
+      ansible.builtin.fail:
+        msg: "Organization '{{ gateway_organization_name }}' already exists. Halting execution."
+      when: gateway_organization_name in (gateway_organizations_lookvar | map(attribute='name'))
+      tags:
+        - always
+
+    - name: "Create Organization in Gateway"
+      ansible.platform.organization:
+        name: "{{ gateway_organization_name | mandatory }}"
+        description: "{{ gateway_organization_description | default(omit) }}"
+        state: "present"
+
+        # Role Standard Options
+        gateway_hostname: "{{ aap_hostname | default(omit, true) }}"
+        gateway_username: "{{ aap_username | default(omit, true) }}"
+        gateway_password: "{{ aap_password | default(omit, true) }}"
+        gateway_token: "{{ aap_token | default(omit, true) }}"
+        gateway_request_timeout: "{{ aap_request_timeout | default(omit, true) }}"
+        gateway_validate_certs: "{{ aap_validate_certs | default(omit) }}"
+      tags:
+        - always
+      no_log: "{{ aap_configuration_secure_logging | default(true) }}"
+      register: create_organization_result
+
+    - name: "Add Admin to Organization in Gateway"
+      ansible.platform.role_user_assignment:
+        role_definition: Organization Admin
+        object_ids: "{{ create_organization_result.id | mandatory }}"  # object_id is deprecated
+        user: "{{ tower_user_name | mandatory }}"
+        state: present
+
+        # Role Standard Options
+        gateway_hostname: "{{ aap_hostname | default(omit, true) }}"
+        gateway_username: "{{ aap_username | default(omit, true) }}"
+        gateway_password: "{{ aap_password | default(omit, true) }}"
+        gateway_token: "{{ aap_token | default(omit, true) }}"
+        gateway_request_timeout: "{{ aap_request_timeout | default(omit, true) }}"
+        gateway_validate_certs: "{{ aap_validate_certs | default(omit) }}"
+      tags:
+        - always
+      no_log: "{{ aap_configuration_secure_logging | default(true) }}"
+      register: add_admin_result
+
+  post_tasks:
+    - name: Authentication | Clear
+      ansible.builtin.include_tasks: "tasks/{{ casc_aap_version }}/auth_clear.yml"
+      when:
+        - __clear_token | default(false)
+      tags:
+        - always
+...

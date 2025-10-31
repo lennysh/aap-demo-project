@@ -1,0 +1,4 @@
+---
+- name: Run the infra.support_assist.ocp_must_gather playbook
+  ansible.builtin.import_playbook: infra.support_assist.ocp_must_gather
+...
