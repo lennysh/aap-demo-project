@@ -1,6 +1,6 @@
 ---
 - name: Listen for Splunk events on a webhook
-  hosts: web
+  hosts: localhost
   ## Define our source for events
   sources:
     - ansible.eda.webhook:
