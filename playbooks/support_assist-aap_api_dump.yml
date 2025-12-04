@@ -1,0 +1,4 @@
+---
+- name: Run the infra.support_assist.aap_api_dump playbook
+  ansible.builtin.import_playbook: infra.support_assist.aap_api_dump
+...

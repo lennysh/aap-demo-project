@@ -1,0 +1,4 @@
+---
+- name: Run the infra.support_assist.rh_case_create playbook
+  ansible.builtin.import_playbook: infra.support_assist.rh_case_create
+...
