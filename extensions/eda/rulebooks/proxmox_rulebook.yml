@@ -4,6 +4,7 @@
   # Note: Proxmox connection variables must be provided when activating this rulebook
   # Required variables: proxmox_host, proxmox_node, proxmox_user, proxmox_token_id, proxmox_token_secret, proxmox_verify_ssl
   # Optional: proxmox_poll_delay (default: 30 seconds)
+  # Note: This rulebook uses run_job_template which requires job templates to be created in AAP
   sources:
     - name: proxmox_monitor
       proxmox_monitor:
@@ -23,19 +24,21 @@
         event.proxmox.previous_status == "running" and
         event.meta.event_type == "vm_stopped_unexpectedly"
       action:
-        run_playbook:
-          name: playbooks/start_proxmox_instance.yml
-          extra_vars:
-            target_vmid: "{{ event.proxmox.vmid }}"
-            target_node: "{{ event.proxmox.node }}"
-            vm_name: "{{ event.proxmox.name }}"
-            instance_type: "vm"
-            proxmox_host: "{{ proxmox_host }}"
-            proxmox_node: "{{ proxmox_node }}"
-            proxmox_user: "{{ proxmox_user }}"
-            proxmox_token_id: "{{ proxmox_token_id }}"
-            proxmox_token_secret: "{{ proxmox_token_secret }}"
-            proxmox_verify_ssl: "{{ proxmox_verify_ssl }}"
+        run_job_template:
+          name: Start Proxmox VM/LXC
+          organization: Default
+          job_args:
+            extra_vars:
+              target_vmid: "{{ event.proxmox.vmid }}"
+              target_node: "{{ event.proxmox.node }}"
+              vm_name: "{{ event.proxmox.name }}"
+              instance_type: "vm"
+              proxmox_host: "{{ proxmox_host }}"
+              proxmox_node: "{{ proxmox_node }}"
+              proxmox_user: "{{ proxmox_user }}"
+              proxmox_token_id: "{{ proxmox_token_id }}"
+              proxmox_token_secret: "{{ proxmox_token_secret }}"
+              proxmox_verify_ssl: "{{ proxmox_verify_ssl }}"
 
     - name: Remediate Stopped LXC (Unexpected Shutdown/Crash)
       condition: >
@@ -44,17 +47,19 @@
         event.proxmox.previous_status == "running" and
         event.meta.event_type == "vm_stopped_unexpectedly"
       action:
-        run_playbook:
-          name: playbooks/start_proxmox_instance.yml
-          extra_vars:
-            target_vmid: "{{ event.proxmox.vmid }}"
-            target_node: "{{ event.proxmox.node }}"
-            vm_name: "{{ event.proxmox.name }}"
-            instance_type: "lxc"
-            proxmox_host: "{{ proxmox_host }}"
-            proxmox_node: "{{ proxmox_node }}"
-            proxmox_user: "{{ proxmox_user }}"
-            proxmox_token_id: "{{ proxmox_token_id }}"
-            proxmox_token_secret: "{{ proxmox_token_secret }}"
-            proxmox_verify_ssl: "{{ proxmox_verify_ssl }}"
+        run_job_template:
+          name: Start Proxmox VM/LXC
+          organization: Default
+          job_args:
+            extra_vars:
+              target_vmid: "{{ event.proxmox.vmid }}"
+              target_node: "{{ event.proxmox.node }}"
+              vm_name: "{{ event.proxmox.name }}"
+              instance_type: "lxc"
+              proxmox_host: "{{ proxmox_host }}"
+              proxmox_node: "{{ proxmox_node }}"
+              proxmox_user: "{{ proxmox_user }}"
+              proxmox_token_id: "{{ proxmox_token_id }}"
+              proxmox_token_secret: "{{ proxmox_token_secret }}"
+              proxmox_verify_ssl: "{{ proxmox_verify_ssl }}"
 ...
