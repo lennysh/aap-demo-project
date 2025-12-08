@@ -1,0 +1,141 @@
+---
+- name: Start Proxmox VM or LXC Container
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # Proxmox Connection Variables - can be overridden via extra_vars
+    proxmox_host: "{{ proxmox_host | default('192.168.1.100:8006') }}"
+    proxmox_node: "{{ proxmox_node | default('pve') }}"
+    proxmox_user: "{{ proxmox_user | default('root@pam') }}"
+    proxmox_token_id: "{{ proxmox_token_id | default('ansible') }}"
+    proxmox_token_secret: "{{ proxmox_token_secret | default('YOUR_SECRET_UUID') }}"
+    proxmox_verify_ssl: "{{ proxmox_verify_ssl | default(false) }}"
+
+    # Instance details - typically passed from EDA rulebook
+    target_vmid: "{{ target_vmid | default(omit) }}"
+    target_node: "{{ target_node | default(proxmox_node) }}"
+    vm_name: "{{ vm_name | default('Unknown') }}"
+    instance_type: "{{ instance_type | default('auto') }}"  # 'vm', 'lxc', or 'auto' to detect
+
+    # Wait for instance to be running
+    wait_for_running: "{{ wait_for_running | default(true) }}"
+    wait_timeout: "{{ wait_timeout | default(60) }}"
+
+  tasks:
+    - name: Validate required parameters
+      ansible.builtin.assert:
+        that:
+          - target_vmid is defined
+          - target_vmid | int > 0
+        fail_msg: "target_vmid must be provided and be a valid integer"
+        quiet: true
+
+    - name: Determine instance type (VM or LXC)
+      ansible.builtin.set_fact:
+        detected_type: "{{ instance_type }}"
+      when: instance_type != 'auto'
+
+    - name: Auto-detect instance type by checking both VM and LXC endpoints
+      when: instance_type == 'auto'
+      block:
+        - name: Check if it's a VM
+          ansible.builtin.uri:
+            url: "https://{{ proxmox_host }}/api2/json/nodes/{{ target_node }}/qemu/{{ target_vmid }}/status/current"
+            method: GET
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ proxmox_token_secret }}"
+            validate_certs: "{{ proxmox_verify_ssl }}"
+            status_code: [200, 404]
+          register: vm_check
+          failed_when: false
+
+        - name: Check if it's an LXC
+          ansible.builtin.uri:
+            url: "https://{{ proxmox_host }}/api2/json/nodes/{{ target_node }}/lxc/{{ target_vmid }}/status/current"
+            method: GET
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ proxmox_token_secret }}"
+            validate_certs: "{{ proxmox_verify_ssl }}"
+            status_code: [200, 404]
+          register: lxc_check
+          failed_when: false
+
+        - name: Set detected type based on API response
+          ansible.builtin.set_fact:
+            detected_type: "{{ 'vm' if vm_check.status == 200 else ('lxc' if lxc_check.status == 200 else 'unknown') }}"
+
+    - name: Fail if instance type cannot be determined
+      ansible.builtin.fail:
+        msg: "Could not determine if {{ target_vmid }} is a VM or LXC container. Please specify instance_type explicitly."
+      when: detected_type == 'unknown'
+
+    - name: Get current status
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_host }}/api2/json/nodes/{{ target_node }}/{{ detected_type }}/{{ target_vmid }}/status/current"
+        method: GET
+        headers:
+          Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ proxmox_token_secret }}"
+        validate_certs: "{{ proxmox_verify_ssl }}"
+      register: current_status
+      failed_when: current_status.status != 200
+
+    - name: Display current status
+      ansible.builtin.debug:
+        msg: >
+          {{ detected_type | upper }} {{ target_vmid }} ({{ vm_name }})
+          current status: {{ current_status.json.data.status | default('unknown') }}
+
+    - name: Skip if already running
+      ansible.builtin.debug:
+        msg: "{{ detected_type | upper }} {{ target_vmid }} is already running. No action needed."
+      when: current_status.json.data.status == 'running'
+      changed_when: false
+
+    - name: Start instance
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_host }}/api2/json/nodes/{{ target_node }}/{{ detected_type }}/{{ target_vmid }}/status/start"
+        method: POST
+        headers:
+          Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ proxmox_token_secret }}"
+        validate_certs: "{{ proxmox_verify_ssl }}"
+        status_code: [200, 400]  # 400 might mean already starting
+      register: start_result
+      when: current_status.json.data.status != 'running'
+      failed_when: start_result.status not in [200, 400]
+
+    - name: Display start result
+      ansible.builtin.debug:
+        var: start_result.json
+      when:
+        - current_status.json.data.status != 'running'
+        - start_result.json is defined
+
+    - name: Wait for instance to be running
+      when:
+        - wait_for_running | bool
+        - current_status.json.data.status != 'running'
+      block:
+        - name: Poll until instance is running
+          ansible.builtin.uri:
+            url: "https://{{ proxmox_host }}/api2/json/nodes/{{ target_node }}/{{ detected_type }}/{{ target_vmid }}/status/current"
+            method: GET
+            headers:
+              Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ proxmox_token_secret }}"
+            validate_certs: "{{ proxmox_verify_ssl }}"
+          register: status_check
+          until: status_check.json.data.status == 'running'
+          retries: "{{ (wait_timeout / 5) | int }}"
+          delay: 5
+          failed_when: status_check.status != 200
+
+        - name: Confirm instance is running
+          ansible.builtin.debug:
+            msg: "✓ {{ detected_type | upper }} {{ target_vmid }} ({{ vm_name }}) is now running"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: >
+          Remediation complete for {{ detected_type | upper }} {{ target_vmid }} ({{ vm_name }}).
+          Final status: {{ current_status.json.data.status if current_status.json.data.status == 'running' else status_check.json.data.status | default('checking') }}
+...

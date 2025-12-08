@@ -26,7 +26,7 @@
       action:
         run_job_template:
           name: Start Proxmox VM/LXC
-          organization: Default
+          organization: DEMOLab
           job_args:
             extra_vars:
               target_vmid: "{{ event.proxmox.vmid }}"
@@ -49,7 +49,7 @@
       action:
         run_job_template:
           name: Start Proxmox VM/LXC
-          organization: Default
+          organization: DEMOLab
           job_args:
             extra_vars:
               target_vmid: "{{ event.proxmox.vmid }}"
