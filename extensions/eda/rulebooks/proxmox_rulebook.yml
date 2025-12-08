@@ -3,12 +3,12 @@
   hosts: localhost
   vars:
     # Proxmox Connection Variables - Update these for your environment
-    proxmox_host: "192.168.1.100:8006"       # Your Proxmox IP:Port
-    proxmox_node: "pve"                      # Your Node Name (e.g., pve)
-    proxmox_user: "root@pam"                 # Your User
-    proxmox_token_id: "ansible"              # Token ID you created
-    proxmox_token_secret: "YOUR_SECRET_UUID" # The UUID secret
-    proxmox_verify_ssl: false               # Set true if you have valid certs
+    # proxmox_host: "192.168.1.100:8006"       # Your Proxmox IP:Port
+    # proxmox_node: "pve"                      # Your Node Name (e.g., pve)
+    # proxmox_user: "root@pam"                 # Your User
+    # proxmox_token_id: "ansible"              # Token ID you created
+    # proxmox_token_secret: "YOUR_SECRET_UUID" # The UUID secret
+    # proxmox_verify_ssl: false               # Set true if you have valid certs
     proxmox_poll_delay: 30                  # Poll every 30 seconds
   sources:
     - name: proxmox_monitor
