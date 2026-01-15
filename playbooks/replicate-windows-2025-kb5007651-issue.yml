@@ -110,7 +110,7 @@
       when: 
         - update_result is succeeded or update_result is failed
         - item.value.kb is defined
-        - '5007651' in item.value.kb
+        - (item.value.kb | select('equalto', '5007651') | list | length) > 0
       loop_control:
         label: "{{ item.key }}"
 
