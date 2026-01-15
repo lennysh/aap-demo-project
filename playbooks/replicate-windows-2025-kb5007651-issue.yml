@@ -58,6 +58,35 @@
         var: available_updates
       when: available_updates is succeeded
 
+    - name: Extract all KB numbers and Update IDs from search results
+      ansible.builtin.set_fact:
+        search_kb_mapping: >-
+          {{
+            available_updates.updates | default({}) | dict2items |
+            map('extract', {'id': 'key', 'kb': 'value.kb', 'title': 'value.title'}) |
+            list
+          }}
+      when: available_updates is succeeded
+
+    - name: Display KB number to Update ID mapping
+      ansible.builtin.debug:
+        msg: "KB {{ item.kb }} -> Update ID: {{ item.id }} - {{ item.title }}"
+      loop: "{{ search_kb_mapping | default([]) }}"
+      when: 
+        - available_updates is succeeded
+        - item.kb is defined
+        - item.kb | length > 0
+      loop_control:
+        label: "KB {{ item.kb | join(',') }}"
+
+    - name: Summary of KB numbers found in search
+      ansible.builtin.debug:
+        msg: >-
+          Found {{ search_kb_mapping | default([]) | length }} updates in search results.
+          Review the KB mappings above to identify any KB numbers that appear with multiple Update IDs
+          (this indicates Microsoft re-using KB numbers, which is the root cause of the issue).
+      when: available_updates is succeeded
+
     - name: Install all updates and reboot as many times as needed
       ansible.windows.win_updates:
         category_names: "{{ update_category_names }}"
@@ -70,6 +99,53 @@
     - name: Display update results
       ansible.builtin.debug:
         var: update_result
+
+    - name: Analyze all Update IDs and KB numbers in final results
+      ansible.builtin.set_fact:
+        final_kb_mapping: >-
+          {{
+            update_result.updates | default({}) | dict2items |
+            map('extract', {
+              'id': 'key',
+              'kb': 'value.kb',
+              'title': 'value.title',
+              'installed': 'value.installed',
+              'failed': 'value.failure_hresult_code is defined'
+            }) |
+            list
+          }}
+      when: update_result is succeeded or update_result is failed
+
+    - name: Display all KB numbers and their Update IDs in final results
+      ansible.builtin.debug:
+        msg: >-
+          Update ID: {{ item.id }}
+          KB: {{ item.kb | default('none') | join(',') }}
+          Installed: {{ item.installed | default(false) }}
+          Failed: {{ item.failed | default(false) }}
+          Title: {{ item.title | default('unknown') }}
+      loop: "{{ final_kb_mapping | default([]) }}"
+      when: final_kb_mapping is defined
+      loop_control:
+        label: "{{ item.id }}"
+
+    - name: Check for KB5007651 Update IDs in final results
+      ansible.builtin.set_fact:
+        kb5007651_updates: >-
+          {{
+            final_kb_mapping | default([]) |
+            selectattr('kb', 'defined') |
+            selectattr('kb', 'contains', '5007651') |
+            list
+          }}
+      when: final_kb_mapping is defined
+
+    - name: Display KB5007651 Update ID analysis
+      ansible.builtin.debug:
+        msg: >-
+          Found {{ kb5007651_updates | default([]) | length }} Update ID(s) for KB5007651:
+          {{ kb5007651_updates | default([]) | map(attribute='id') | list | join(', ') }}
+      when: kb5007651_updates is defined
 
     - name: Check for KB5007651 in update results
       ansible.builtin.set_fact:
@@ -103,6 +179,22 @@
       ansible.builtin.debug:
         var: kb5007651_details
       when: kb5007651_details is defined
+
+    - name: Check if KB5007651 is actually installed on the system
+      ansible.windows.win_shell: |
+        Get-HotFix -Id KB5007651 -ErrorAction SilentlyContinue | 
+        Select-Object HotFixID, InstalledOn, Description | 
+        ConvertTo-Json
+      register: kb5007651_hotfix_check
+      ignore_errors: true
+
+    - name: Display KB5007651 system installation status
+      ansible.builtin.debug:
+        msg: >-
+          KB5007651 installation check:
+          {{ kb5007651_hotfix_check.stdout | default('Not found in Get-HotFix') }}
+          {{ 'HotFix is installed on system' if kb5007651_hotfix_check.rc == 0 else 'HotFix not found or not installed' }}
+      when: kb5007651_hotfix_check is defined
 
     - name: Summary - Expected Issue Reproduction
       ansible.builtin.debug:
