@@ -1,0 +1,136 @@
+---
+# Playbook to replicate Windows Server 2025 KB5007651 issue
+# Based on Red Hat Case 04214778
+#
+# Issue Summary:
+# - Windows Server 2025 fails with KB5007651 error when using ansible.windows.win_updates
+# - Error: "Unknown WUA HRESULT -1 (UNKNOWN 0xFFFFFFFF)"
+# - Update actually installs successfully according to Windows logs, but Ansible reports failure
+# - This is specific to Windows Server 2025 and KB5007651 (Windows Security platform update)
+# - The KB number is reused multiple times as Microsoft re-releases the update
+#
+# Bug Reference: https://issues.redhat.com/browse/AAP-51320
+#
+# Usage:
+#   ansible-playbook -i inventory replicate-windows-2025-kb5007651-issue.yml
+#   ansible-playbook -i inventory replicate-windows-2025-kb5007651-issue.yml -e windows_host=windows2025.example.com
+
+- name: Replicate Windows Server 2025 KB5007651 Update Issue
+  hosts: "{{ windows_host | default('windows2025') }}"
+  gather_facts: true
+  vars:
+    # Windows Update configuration matching the customer's bootstrap automation
+    update_category_names: '*'
+    update_reboot: true
+    update_reboot_timeout: 1800  # 30 minutes
+    update_server_selection: "windows_update"
+
+    # Optional: Set to true to ignore errors (as customer does in production)
+    should_ignore_update_errors: "{{ ignore_update_errors | default(false) }}"
+
+  tasks:
+    - name: Verify this is Windows Server 2025
+      ansible.builtin.assert:
+        that:
+          - ansible_os_name == 'Microsoft Windows Server 2025 Datacenter' or
+            ansible_os_name == 'Microsoft Windows Server 2025 Standard'
+        fail_msg: "This playbook is designed for Windows Server 2025. Detected OS: {{ ansible_os_name }}"
+        quiet: false
+
+    - name: Display system information
+      ansible.builtin.debug:
+        msg:
+          - "Target host: {{ inventory_hostname }}"
+          - "OS Name: {{ ansible_os_name | default('unknown') }}"
+          - "OS Version: {{ ansible_os_version | default('unknown') }}"
+          - "Architecture: {{ ansible_architecture | default('unknown') }}"
+
+    - name: Check for existing Windows Updates
+      ansible.windows.win_updates:
+        category_names: "{{ update_category_names }}"
+        state: searched
+        server_selection: "{{ update_server_selection }}"
+      register: available_updates
+      ignore_errors: "{{ should_ignore_update_errors }}"
+
+    - name: Display available updates
+      ansible.builtin.debug:
+        var: available_updates
+      when: available_updates is succeeded
+
+    - name: Install all updates and reboot as many times as needed
+      ansible.windows.win_updates:
+        category_names: "{{ update_category_names }}"
+        reboot: "{{ update_reboot }}"
+        reboot_timeout: "{{ update_reboot_timeout }}"
+        server_selection: "{{ update_server_selection }}"
+      register: update_result
+      ignore_errors: "{{ should_ignore_update_errors }}"
+
+    - name: Display update results
+      ansible.builtin.debug:
+        var: update_result
+
+    - name: Check for KB5007651 in update results
+      ansible.builtin.set_fact:
+        kb5007651_found: "{{ update_result.updates | default({}) | dict2items |
+          selectattr('value.kb', 'defined') |
+          selectattr('value.kb', 'contains', '5007651') |
+          list | length > 0 }}"
+      when: update_result is succeeded
+
+    - name: Display KB5007651 status
+      ansible.builtin.debug:
+        msg:
+          - "KB5007651 found in updates: {{ kb5007651_found | default('unknown') }}"
+          - "Expected behavior: Update installs successfully but Ansible reports failure"
+          - "Expected error: 'Unknown WUA HRESULT -1 (UNKNOWN 0xFFFFFFFF)'"
+          - "Expected error: 'An update loop was detected'"
+      when: update_result is succeeded
+
+    - name: Extract KB5007651 update details
+      ansible.builtin.set_fact:
+        kb5007651_details: "{{ update_result.updates | default({}) | dict2items |
+          selectattr('value.kb', 'defined') |
+          selectattr('value.kb', 'contains', '5007651') |
+          map(attribute='value') |
+          list | first }}"
+      when:
+        - update_result is succeeded
+        - kb5007651_found | default(false) | bool
+
+    - name: Display KB5007651 update details
+      ansible.builtin.debug:
+        var: kb5007651_details
+      when: kb5007651_details is defined
+
+    - name: Summary - Expected Issue Reproduction
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Windows Server 2025 KB5007651 Issue Test"
+          - "=========================================="
+          - "If the issue is reproduced, you should see:"
+          - "  - failed_update_count: 1"
+          - "  - KB5007651 with failure_hresult_code: -1"
+          - "  - failure_msg: 'Unknown WUA HRESULT -1 (UNKNOWN 0xFFFFFFFF)'"
+          - "  - msg: 'An update loop was detected...'"
+          - ""
+          - "However, Windows Event Logs will show:"
+          - "  - Update was successfully downloaded"
+          - "  - Update was successfully installed"
+          - "  - Package Microsoft.SecHealthUI was updated"
+          - ""
+          - "This is a known issue with ansible.windows.win_updates"
+          - "on Windows Server 2025 when KB5007651 is present."
+          - "Bug: https://issues.redhat.com/browse/AAP-51320"
+          - "=========================================="
+      when: update_result is succeeded or update_result is failed
+
+    - name: Fail if update task failed (unless errors are ignored)
+      ansible.builtin.fail:
+        msg: "Update task failed. Check the update_result output above for details."
+      when:
+        - update_result is failed
+        - not should_ignore_update_errors | bool
+...
