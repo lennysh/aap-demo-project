@@ -5,4 +5,5 @@ collections:
     version: devel
     type: git
   - name: community.general
+  - name: ansible.windows
 ...
