@@ -6,4 +6,7 @@ collections:
     type: git
   - name: community.general
   - name: ansible.windows
+    source: https://github.com/lennysh/ansible.windows.git
+    version: win_updates-enhance-update-loops
+    type: git
 ...
