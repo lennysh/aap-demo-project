@@ -1,0 +1,44 @@
+---
+# Simple playbook to test connectivity to Windows hosts
+# Uses win_ping module to verify WinRM connection and PowerShell execution
+#
+# Usage:
+#   ansible-playbook -i inventories/windows-2025-test.ini playbooks/test-windows-connection.yml
+#   ansible-playbook -i inventories/windows-2025-test.ini playbooks/test-windows-connection.yml -e windows_host=windows2025-test
+
+- name: Test Windows Host Connectivity
+  hosts: "{{ windows_host | default('windows2025') }}"
+  gather_facts: false
+
+  tasks:
+    - name: Display target host information
+      ansible.builtin.debug:
+        msg:
+          - "Testing connectivity to: {{ inventory_hostname }}"
+          - "Host address: {{ ansible_host | default('not set') }}"
+          - "Connection method: {{ ansible_connection | default('not set') }}"
+          - "User: {{ ansible_user | default('not set') }}"
+
+    - name: Test WinRM connectivity with win_ping
+      ansible.windows.win_ping:
+      register: ping_result
+
+    - name: Display ping result
+      ansible.builtin.debug:
+        msg:
+          - "✓ Connection successful!"
+          - "Host: {{ inventory_hostname }}"
+          - "Ping result: {{ ping_result.ping }}"
+          - "WinRM and PowerShell are working correctly"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Connection Test Complete"
+          - "=========================================="
+          - "Host: {{ inventory_hostname }}"
+          - "Status: ✓ Ready for Ansible operations"
+          - "=========================================="
+      when: ping_result is succeeded
+...
