@@ -5,7 +5,7 @@
   tasks:
     - name: Add host in essential service inventory
       ansible.builtin.uri:
-        url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_HOST') }}/groups/{{ group_id }}/hosts/"
+        url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_HOST') }}/api/controller/v2/groups/{{ group_id }}/hosts/"
         user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
         password: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
         force_basic_auth: true
