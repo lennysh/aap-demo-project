@@ -1,0 +1,19 @@
+- name: Replicate Dynamic Host Adding to Group
+  hosts: "all"
+  gather_facts: true
+
+  tasks:
+    - name: Add host in essential service inventory
+      ansible.builtin.uri:
+        url: "{{ lookup('ansible.builtin.env', 'CONTROLLER_HOST') }}/groups/{{ group_id }}/hosts/"
+        user: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
+        password: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
+        force_basic_auth: true
+        method: POST
+        body_format: json
+        body: {"name": "{{ inventory_hostname }}"}
+        status_code: [200, 201, 204]
+        return_content: true
+      delegate_to:  localhost
+      register: host_add
+...

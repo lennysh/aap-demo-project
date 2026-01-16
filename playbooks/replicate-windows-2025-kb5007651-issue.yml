@@ -62,7 +62,7 @@
       ansible.builtin.debug:
         msg: "KB {{ item.value.kb | default([]) | join(',') }} -> Update ID: {{ item.key }} - {{ item.value.title }}"
       loop: "{{ available_updates.updates | default({}) | dict2items }}"
-      when: 
+      when:
         - available_updates is succeeded
         - item.value.kb is defined
         - item.value.kb | length > 0
@@ -107,7 +107,7 @@
       ansible.builtin.set_fact:
         kb5007651_updates: "{{ kb5007651_updates | default([]) + [item.key] }}"
       loop: "{{ update_result.updates | default({}) | dict2items }}"
-      when: 
+      when:
         - update_result is succeeded or update_result is failed
         - item.value.kb is defined
         - (item.value.kb | select('equalto', '5007651') | list | length) > 0
@@ -119,7 +119,7 @@
         msg: >-
           Found {{ kb5007651_updates | default([]) | length }} Update ID(s) for KB5007651:
           {{ kb5007651_updates | default([]) | join(', ') }}
-      when: 
+      when:
         - update_result is succeeded or update_result is failed
         - kb5007651_updates is defined
 
@@ -158,8 +158,8 @@
 
     - name: Check if KB5007651 is actually installed on the system
       ansible.windows.win_shell: |
-        Get-HotFix -Id KB5007651 -ErrorAction SilentlyContinue | 
-        Select-Object HotFixID, InstalledOn, Description | 
+        Get-HotFix -Id KB5007651 -ErrorAction SilentlyContinue |
+        Select-Object HotFixID, InstalledOn, Description |
         ConvertTo-Json
       register: kb5007651_hotfix_check
       ignore_errors: true
